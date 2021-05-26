@@ -117,7 +117,7 @@ autoplot(stl(fludat_ts[,4], s.window = 11,l.window = 52)) +
 
 ### Modeling:
 #### 1. STLF + ETS
-```{r warning=FALSE,message=FALSE,results='hide'}
+```{r warning=FALSE,message=FALSE}
 #1. STL + Exponential smoothing
 library(forecast)
 library(ggplot2)
@@ -165,7 +165,7 @@ lambda_arima_test <- BoxCox.lambda(train_arima)
 arima_model <- auto.arima(train_arima, stepwise = F, approximation = F,  trace = T)
 ```
 
-```{r  warning=FALSE,message=FALSE,results='hide'}
+```{r  warning=FALSE,message=FALSE}
 # Final model: ARIMA(2,0,0)(1,1,0)
 arima_model<- Arima(train_arima, order=c(2,0,0), seasonal = list(order=c(1,1,0), period = 52), include.drift = TRUE)
 checkresiduals(arima_model)
@@ -194,7 +194,7 @@ plot(arima_forecast, main = "ARIMA model forecast", xlab = "Year", ylab = "Numbe
 ```
 
 #### TBATS model
-```{r warning=FALSE,message=FALSE,results='hide'}
+```{r warning=FALSE,message=FALSE}
 # Train - Test 80%-20%
 train_tbats <- window(fludat_ts[,4], end = c(2018,6))
 
@@ -225,7 +225,7 @@ plot(tbats_forecast, main = "TBATS model forecast", xlab = "Year", ylab = "Numbe
 ```
 
 ### Choosing the best traditional forecasting model
-```{r eval=FALSE, results='hide'}
+```{r results='hide'}
 ### eval = F due to the large number of outpurs
 
 fludat_ts[,4] %>% 
