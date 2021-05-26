@@ -1,13 +1,11 @@
 ---
-title: "Influenza elemzés"
+title: "Flu time series forecasting"
 author: "Nguyen Cong Tung"
-date: '2020 10 24 '
-output: html_document
+date: '2021 05 '
+output: rmarkdown::github_document
 ---
 
-# A következő elemzés a diplomamunka része.
-
-### A szükséges csomagok betöltése, és frissítése:
+### Importing the libraries:
 ```{r setup, eval=FALSE}
 install.packages("forecast")
 install.packages("stats")
@@ -28,36 +26,40 @@ library(lubridate)
 update.packages()
 ```
 
-### Az adat betöltése:
+### Importing the dataset:
 ```{r import data}
-setwd("C:/Users/Asus/Documents/mentés/Egyetem/Szakdoga/R/Flu")
-fludat <- read.csv("C:/Users/Asus/Documents/mentés/Egyetem/Szakdoga/R/Flu/flu__2010_2020.csv", sep = ";")
+setwd("")
+fludat <- read.csv("./dataset/flu__2010_2020.csv", sep = ";")
 ```
 
-### Adatmanipuláció:
+### Data preparation:
 ```{r warning=FALSE,echo=TRUE, results='hide', message=FALSE}
 library(dplyr)
 
 class(fludat)
 
-#0-k feltöltése
+# Replacing NA values with 0
 fludat[is.na(fludat)] <- 0
-#dátummá konvertálás
+
+# Parse to datetime
 sapply(fludat,class)
 fludat$sdate <- as.Date(fludat$Start.date)
 
-#pivot tábla létrehozás:
+# Pivot table:
 fludat_pivot <- fludat %>% 
   select(sdate,Processed,A..Total.,B..Total.,Total.number.of.influenza.positive.viruses) %>% 
   group_by(sdate)  %>% 
   summarise(Processed = sum(Processed),A_total = sum(A..Total.), B_total = sum(B..Total.),All_total = sum(Total.number.of.influenza.positive.viruses))
 
-#ts objektum létrehozás:
+# To csv for python LSTM modeling
+write.csv(fludat_pivot, './dataset/Flu_pivot.csv', row.names = FALSE)
+
+# Time series object creation:
 fludat_ts <- ts(fludat_pivot[,c(2:5)], start = 2010, frequency = 52)
 head(fludat_ts)
 ```
 
-### Adat betekintés, vizualizáció:
+### EDA:
 ```{r warning=FALSE, message=FALSE}
 library(forecast)
 library(ggplot2)
@@ -65,10 +67,10 @@ library(ggplot2)
 #Processed - All_total
 
 autoplot(fludat_ts[,c(1,4)]) +
-  ggtitle("Influenza esetek heti alakulása") +
+  ggtitle("Flu cases - Weekly") +
   theme(plot.title = element_text(hjust = 0.5, size = 20)) +
-  xlab("Évszám") +
-  ylab("Influenza esetek száma") +
+  xlab("Year") +
+  ylab("Number of flu cases") +
   scale_x_continuous(breaks = seq(from = 2010, to =  2020, by = 2)) +
   geom_hline(yintercept = mean(fludat_ts[,1]), color = "red") +
   geom_hline(yintercept = mean(fludat_ts[,4]), color = "blue") +
@@ -79,22 +81,21 @@ autoplot(fludat_ts[,c(1,4)]) +
 #A_total ~ B_total
 
 autoplot(fludat_ts[,2:3]) +
-  ggtitle("'A' és 'B' típusú esetek heti alakulása") +
+  ggtitle("'A' and 'B' type cases - Weekly") +
   theme(plot.title = element_text(hjust = 0.5, size = 20)) +
-  xlab("Évszám") +
-  ylab("'A' és 'B' esetek száma") +
+  xlab("Year") +
+  ylab("Number of 'A' and 'B' types") +
   scale_x_continuous(breaks = seq(from = 2010, to =  2020, by = 2)) +
   theme_classic()   
 ```
 
 ```{r}
-#Diplomamunkába nincsenek benne az ábrák, a szezonalitás megerősítésére néztem meg itt.
 #seasonality plot ~ All_total
 
 ggseasonplot(fludat_ts[,4], continuous = F, year.labels = F) +
-  ggtitle("Szezonalitás vizsgálat") + 
+  ggtitle("Seasonality check") + 
   theme(plot.title = element_text(hjust = 0.5, size = 20)) +
-  xlab("Hét") +
+  xlab("Week") +
   theme_classic() 
   
 ggsubseriesplot(fludat_ts[,4])
@@ -106,136 +107,135 @@ ggseasonplot(fludat_ts[,4], continuous = F, year.labels = F, polar = T)
 #decomposition STL
 
 autoplot(stl(fludat_ts[,4], s.window = 11,l.window = 52)) +
-  ggtitle("Influenza adatsor dekompozíció (2010-2020)") + 
+  ggtitle("Flu dataset decomposition (2010-2020)") + 
   theme(plot.title = element_text(hjust = 0.5, size = 20)) +
-  xlab("Év") 
+  xlab("Year") 
 ```
 
-### Modellezés:
+### Modeling:
 #### 1. STLF + ETS
 ```{r warning=FALSE,message=FALSE,results='hide'}
-#1. STL + Exponenciális simítás
+#1. STL + Exponential smoothing
 library(forecast)
 library(ggplot2)
 library(dplyr)
 #Train - Test 80%-20%
 train_ets <- window(fludat_ts[,4], end = c(2018,6))
 
-#Tanuló adathalmaz modellezés, reziduum ellenőrzés
+# Modeling, checking residuals
 ets_model <- stlf(train_ets, h = 124)
 checkresiduals(ets_model)
 
 summary(ets_model)
 
-#Előrejelzés a tanuló adathalmazon
+# Forecasting
 ets_forecast <- forecast(ets_model)
 ```
 
 ```{r}
-#Kiértékelés
+# Evaluation
 accuracy(ets_forecast, fludat_ts[,4])
 
-#Vizualizáció
+# Visualization
 autoplot(ets_forecast) +
-  ggtitle("STLF modell előrejelzése 2 évre előre") +
+  ggtitle("STLF model 2 years forecast") +
   theme(plot.title = element_text(hjust = 0.5, size = 20)) +
-  xlab("Évszám") +
-  ylab("Pozitív influenza esetek száma") +
+  xlab("Year") +
+  ylab("Number of positive cases") +
   scale_x_continuous(breaks = seq(from = 2010, to = 2020, by = 2)) +
 theme_classic() 
 
-#Eredeti adattal összehasonlítás - vizualizáció
-plot(ets_forecast, main = "STLF modell előrejelzés", xlab = "Évszám", ylab = "Pozitív esetek száma") 
+# Comparing the forecast with the original data
+plot(ets_forecast, main = "STLF model forecast", xlab = "Year", ylab = "Number of positive cases") 
   lines(fludat_ts[,4])
 ```
 
-#### ARIMA modell
+#### ARIMA model
 ```{r}
-#train - test 80%-20%
+# Train - Test 80%-20%
 train_arima <- subset(fludat_ts[,4], end = length(fludat_ts[,4]) - 104)
 ```
 
 ```{r eval=FALSE}
-#ARIMA modell kiválasztás, 1 óráig futna, ezért eval = F, a kiválasztott modell ARIMA(2,0,0)(1,1,0)
+# ARIMA modeling, eval = F, final model: ARIMA(2,0,0)(1,1,0)
 lambda_arima_test <- BoxCox.lambda(train_arima)
 arima_model <- auto.arima(train_arima, stepwise = F, approximation = F,  trace = T)
 ```
 
 ```{r  warning=FALSE,message=FALSE,results='hide'}
-#kiválasztott modell: ARIMA(2,0,0)(1,1,0)
+# Final model: ARIMA(2,0,0)(1,1,0)
 arima_model<- Arima(train_arima, order=c(2,0,0), seasonal = list(order=c(1,1,0), period = 52), include.drift = TRUE)
 checkresiduals(arima_model)
 ```
 
 ```{r warning=FALSE,message=FALSE}
-#Előrejelzés
+# Forecasting
 arima_forecast <- forecast(arima_model, h = 124)
 
-#Kiértékelés
+# Evaluation
 accuracy(arima_forecast,fludat_ts[,4])
 
-#Előrejelzés vizualizáció
+# Forecasting visualization
 autoplot(arima_forecast) +
-  ggtitle("ARIMA modell előrejelzése 2 évre előre teszt adatsoron") +
+  ggtitle("ARIMA model 2 years forecast") +
   theme(plot.title = element_text(hjust = 0.5, size = 20)) +
-  xlab("Évszám") +
-  ylab("Pozitív influenza esetek száma") +
+  xlab("Year") +
+  ylab("Number of positive cases") +
   scale_x_continuous(breaks = seq(from = 2010, to = 2020, by = 2)) + 
   theme_classic() 
 
-#Eredeti adathalmazzal összehasonlítás
-plot(arima_forecast, main = "ARIMA modell előrejelzés", xlab = "Évszám", ylab = "Pozitív esetek száma") 
+# Comparing with the original data
+plot(arima_forecast, main = "ARIMA model forecast", xlab = "Year", ylab = "Number of positive cases") 
   lines(fludat_ts[,4]) 
 
 ```
 
-#### TBATS modell
+#### TBATS model
 ```{r warning=FALSE,message=FALSE,results='hide'}
-#train - test 80%-20%
+# Train - Test 80%-20%
 train_tbats <- window(fludat_ts[,4], end = c(2018,6))
 
-#TBATS modell kiválasztás
+# TBATS modeling 
 tbats_model <- tbats(train_tbats)
 checkresiduals(tbats_model)
 
-#Előrejelzés
+# Forecasting
 tbats_forecast <- forecast(tbats_model, h = 124)
 ```
 
 ```{r warning=FALSE, message=FALSE}
-#Kiértékelés
+# Evaluation
 accuracy(tbats_forecast,fludat_ts[,4])
 
-#Előrejelzés vizualizáció
+# Forecast visualization
 autoplot(tbats_forecast) +
-  ggtitle("TBATS modell előrejelzése 2 évre előre") +
+  ggtitle("TBATS model 2 years forecast") +
   theme(plot.title = element_text(hjust = 0.5, size = 20)) +
-  xlab("Évszám") +
-  ylab("Pozitív influenza esetek száma") +
+  xlab("Year") +
+  ylab("Number of positive cases") +
   scale_x_continuous(breaks = seq(from = 2010, to = 2020, by = 2)) +
   theme_classic() 
 
-#Eredeti adathalmazzal összehasonlítás
-plot(tbats_forecast, main = "TBATS modell előrejelzés", xlab = "Évszám", ylab = "Pozitív esetek száma") 
+# Comparing with the original data
+plot(tbats_forecast, main = "TBATS model forecast", xlab = "Year", ylab = "Number of positive cases") 
   lines(fludat_ts[,4]) 
 ```
 
-### Legjobb modell kiválasztása, ezzel előrejelzés 2 évre
+### Choosing the best traditional forecasting model
 ```{r eval=FALSE, results='hide'}
-### Nagy mennyiségű output miatt eval = F-ra állítva
+### eval = F due to the large number of outpurs
 
-#### legjobb modell kiválasztása és előrejelzés #########
 fludat_ts[,4] %>% 
   tbats() %>% 
   forecast(h = 124) %>% 
   autoplot() +
-  ggtitle("Influenza előrejelzése 2 évre TBATS modellel") +
+  ggtitle("Flu 2 years forecasting with TBATS model") +
   theme(plot.title = element_text(hjust = 0.5, size = 20)) +
   scale_x_continuous(breaks = seq(from = 2010, to = 2022, by = 2)) +
-  xlab("Évszám") +
-  ylab("Pozitív esetek száma")
+  xlab("Year") +
+  ylab("Number of positive cases")
 
-#megnézni az értékeit
+# Check its values
 fludat_ts[,4] %>% 
   tbats() %>% 
   forecast(h = 124) %>% 
@@ -243,10 +243,11 @@ fludat_ts[,4] %>%
   print()
 ```
 
-### Külön entitásként előrejelzés TBATS modellel
+### Modeling 
 ```{r eval=FALSE, results='hide'}
-#Nagy mennyiségű az output, ezért eval = F
-#vektor létrehozás
+# eval = F due to the large number of outputs
+
+# Creating a vector containing the WHO European countries
 countries <- c("Albania",
                "Armenia",
                "Austria",
@@ -298,7 +299,7 @@ countries <- c("Albania",
                "United Kingdom of Great Britain and Northern Ireland",
                "Uzbekistan")
 
-#Adatmanipuláció, modellezés, előrejelzés, kiértékelés országonként
+# Pivoting, modeling, forecasting, evaluating in each country
 
 for (c in countries) {
   
