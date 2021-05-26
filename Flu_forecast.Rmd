@@ -1,0 +1,324 @@
+---
+title: "Influenza elemzés"
+author: "Nguyen Cong Tung"
+date: '2020 10 24 '
+output: html_document
+---
+
+# A következő elemzés a diplomamunka része.
+
+### A szükséges csomagok betöltése, és frissítése:
+```{r setup, eval=FALSE}
+install.packages("forecast")
+install.packages("stats")
+install.packages("ggplot2")
+install.packages("dplyr")
+install.packages("tidyr")
+install.packages("zoo")
+install.packages("lubridate")
+
+library(forecast)
+library(stats)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(zoo)
+library(lubridate)
+
+update.packages()
+```
+
+### Az adat betöltése:
+```{r import data}
+setwd("C:/Users/Asus/Documents/mentés/Egyetem/Szakdoga/R/Flu")
+fludat <- read.csv("C:/Users/Asus/Documents/mentés/Egyetem/Szakdoga/R/Flu/flu__2010_2020.csv", sep = ";")
+```
+
+### Adatmanipuláció:
+```{r warning=FALSE,echo=TRUE, results='hide', message=FALSE}
+library(dplyr)
+
+class(fludat)
+
+#0-k feltöltése
+fludat[is.na(fludat)] <- 0
+#dátummá konvertálás
+sapply(fludat,class)
+fludat$sdate <- as.Date(fludat$Start.date)
+
+#pivot tábla létrehozás:
+fludat_pivot <- fludat %>% 
+  select(sdate,Processed,A..Total.,B..Total.,Total.number.of.influenza.positive.viruses) %>% 
+  group_by(sdate)  %>% 
+  summarise(Processed = sum(Processed),A_total = sum(A..Total.), B_total = sum(B..Total.),All_total = sum(Total.number.of.influenza.positive.viruses))
+
+#ts objektum létrehozás:
+fludat_ts <- ts(fludat_pivot[,c(2:5)], start = 2010, frequency = 52)
+head(fludat_ts)
+```
+
+### Adat betekintés, vizualizáció:
+```{r warning=FALSE, message=FALSE}
+library(forecast)
+library(ggplot2)
+
+#Processed - All_total
+
+autoplot(fludat_ts[,c(1,4)]) +
+  ggtitle("Influenza esetek heti alakulása") +
+  theme(plot.title = element_text(hjust = 0.5, size = 20)) +
+  xlab("Évszám") +
+  ylab("Influenza esetek száma") +
+  scale_x_continuous(breaks = seq(from = 2010, to =  2020, by = 2)) +
+  geom_hline(yintercept = mean(fludat_ts[,1]), color = "red") +
+  geom_hline(yintercept = mean(fludat_ts[,4]), color = "blue") +
+  theme_classic() 
+```
+
+```{r}
+#A_total ~ B_total
+
+autoplot(fludat_ts[,2:3]) +
+  ggtitle("'A' és 'B' típusú esetek heti alakulása") +
+  theme(plot.title = element_text(hjust = 0.5, size = 20)) +
+  xlab("Évszám") +
+  ylab("'A' és 'B' esetek száma") +
+  scale_x_continuous(breaks = seq(from = 2010, to =  2020, by = 2)) +
+  theme_classic()   
+```
+
+```{r}
+#Diplomamunkába nincsenek benne az ábrák, a szezonalitás megerősítésére néztem meg itt.
+#seasonality plot ~ All_total
+
+ggseasonplot(fludat_ts[,4], continuous = F, year.labels = F) +
+  ggtitle("Szezonalitás vizsgálat") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 20)) +
+  xlab("Hét") +
+  theme_classic() 
+  
+ggsubseriesplot(fludat_ts[,4])
+
+ggseasonplot(fludat_ts[,4], continuous = F, year.labels = F, polar = T)
+```
+
+```{r}
+#decomposition STL
+
+autoplot(stl(fludat_ts[,4], s.window = 11,l.window = 52)) +
+  ggtitle("Influenza adatsor dekompozíció (2010-2020)") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 20)) +
+  xlab("Év") 
+```
+
+### Modellezés:
+#### 1. STLF + ETS
+```{r warning=FALSE,message=FALSE,results='hide'}
+#1. STL + Exponenciális simítás
+library(forecast)
+library(ggplot2)
+library(dplyr)
+#Train - Test 80%-20%
+train_ets <- window(fludat_ts[,4], end = c(2018,6))
+
+#Tanuló adathalmaz modellezés, reziduum ellenőrzés
+ets_model <- stlf(train_ets, h = 124)
+checkresiduals(ets_model)
+
+summary(ets_model)
+
+#Előrejelzés a tanuló adathalmazon
+ets_forecast <- forecast(ets_model)
+```
+
+```{r}
+#Kiértékelés
+accuracy(ets_forecast, fludat_ts[,4])
+
+#Vizualizáció
+autoplot(ets_forecast) +
+  ggtitle("STLF modell előrejelzése 2 évre előre") +
+  theme(plot.title = element_text(hjust = 0.5, size = 20)) +
+  xlab("Évszám") +
+  ylab("Pozitív influenza esetek száma") +
+  scale_x_continuous(breaks = seq(from = 2010, to = 2020, by = 2)) +
+theme_classic() 
+
+#Eredeti adattal összehasonlítás - vizualizáció
+plot(ets_forecast, main = "STLF modell előrejelzés", xlab = "Évszám", ylab = "Pozitív esetek száma") 
+  lines(fludat_ts[,4])
+```
+
+#### ARIMA modell
+```{r}
+#train - test 80%-20%
+train_arima <- subset(fludat_ts[,4], end = length(fludat_ts[,4]) - 104)
+```
+
+```{r eval=FALSE}
+#ARIMA modell kiválasztás, 1 óráig futna, ezért eval = F, a kiválasztott modell ARIMA(2,0,0)(1,1,0)
+lambda_arima_test <- BoxCox.lambda(train_arima)
+arima_model <- auto.arima(train_arima, stepwise = F, approximation = F,  trace = T)
+```
+
+```{r  warning=FALSE,message=FALSE,results='hide'}
+#kiválasztott modell: ARIMA(2,0,0)(1,1,0)
+arima_model<- Arima(train_arima, order=c(2,0,0), seasonal = list(order=c(1,1,0), period = 52), include.drift = TRUE)
+checkresiduals(arima_model)
+```
+
+```{r warning=FALSE,message=FALSE}
+#Előrejelzés
+arima_forecast <- forecast(arima_model, h = 124)
+
+#Kiértékelés
+accuracy(arima_forecast,fludat_ts[,4])
+
+#Előrejelzés vizualizáció
+autoplot(arima_forecast) +
+  ggtitle("ARIMA modell előrejelzése 2 évre előre teszt adatsoron") +
+  theme(plot.title = element_text(hjust = 0.5, size = 20)) +
+  xlab("Évszám") +
+  ylab("Pozitív influenza esetek száma") +
+  scale_x_continuous(breaks = seq(from = 2010, to = 2020, by = 2)) + 
+  theme_classic() 
+
+#Eredeti adathalmazzal összehasonlítás
+plot(arima_forecast, main = "ARIMA modell előrejelzés", xlab = "Évszám", ylab = "Pozitív esetek száma") 
+  lines(fludat_ts[,4]) 
+
+```
+
+#### TBATS modell
+```{r warning=FALSE,message=FALSE,results='hide'}
+#train - test 80%-20%
+train_tbats <- window(fludat_ts[,4], end = c(2018,6))
+
+#TBATS modell kiválasztás
+tbats_model <- tbats(train_tbats)
+checkresiduals(tbats_model)
+
+#Előrejelzés
+tbats_forecast <- forecast(tbats_model, h = 124)
+```
+
+```{r warning=FALSE, message=FALSE}
+#Kiértékelés
+accuracy(tbats_forecast,fludat_ts[,4])
+
+#Előrejelzés vizualizáció
+autoplot(tbats_forecast) +
+  ggtitle("TBATS modell előrejelzése 2 évre előre") +
+  theme(plot.title = element_text(hjust = 0.5, size = 20)) +
+  xlab("Évszám") +
+  ylab("Pozitív influenza esetek száma") +
+  scale_x_continuous(breaks = seq(from = 2010, to = 2020, by = 2)) +
+  theme_classic() 
+
+#Eredeti adathalmazzal összehasonlítás
+plot(tbats_forecast, main = "TBATS modell előrejelzés", xlab = "Évszám", ylab = "Pozitív esetek száma") 
+  lines(fludat_ts[,4]) 
+```
+
+### Legjobb modell kiválasztása, ezzel előrejelzés 2 évre
+```{r eval=FALSE, results='hide'}
+### Nagy mennyiségű output miatt eval = F-ra állítva
+
+#### legjobb modell kiválasztása és előrejelzés #########
+fludat_ts[,4] %>% 
+  tbats() %>% 
+  forecast(h = 124) %>% 
+  autoplot() +
+  ggtitle("Influenza előrejelzése 2 évre TBATS modellel") +
+  theme(plot.title = element_text(hjust = 0.5, size = 20)) +
+  scale_x_continuous(breaks = seq(from = 2010, to = 2022, by = 2)) +
+  xlab("Évszám") +
+  ylab("Pozitív esetek száma")
+
+#megnézni az értékeit
+fludat_ts[,4] %>% 
+  tbats() %>% 
+  forecast(h = 124) %>% 
+  summary() %>% 
+  print()
+```
+
+### Külön entitásként előrejelzés TBATS modellel
+```{r eval=FALSE, results='hide'}
+#Nagy mennyiségű az output, ezért eval = F
+#vektor létrehozás
+countries <- c("Albania",
+               "Armenia",
+               "Austria",
+               "Azerbaijan",
+               "Belarus",
+               "Belgium",
+               "Bosnia and Herzegovina",
+               "Bulgaria",
+               "Croatia",
+               "Cyprus",
+               "Czechia",
+               "Denmark",
+               "Estonia",
+               "Finland",
+               "France",
+               "Georgia",
+               "Germany",
+               "Greece",
+               "Hungary",
+               "Iceland",
+               "Ireland",
+               "Israel",
+               "Italy",
+               "Kazakhstan",
+               "Kyrgyzstan",
+               "Latvia",
+               "Lithuania",
+               "Luxembourg",
+               "Malta",
+               "Montenegro",
+               "Netherlands",
+               "North Macedonia",
+               "Norway",
+               "Poland",
+               "Portugal",
+               "Republic of Moldova",
+               "Romania",
+               "Russian Federation",
+               "Serbia",
+               "Slovakia",
+               "Slovenia",
+               "Spain",
+               "Sweden",
+               "Switzerland",
+               "Tajikistan",
+               "Turkey",
+               "Turkmenistan",
+               "Ukraine",
+               "United Kingdom of Great Britain and Northern Ireland",
+               "Uzbekistan")
+
+#Adatmanipuláció, modellezés, előrejelzés, kiértékelés országonként
+
+for (c in countries) {
+  
+  fludat_country <- fludat[fludat$Country..area.or.territory == c,]
+  
+  fludat_pivot_country <- fludat_country %>% 
+    select(sdate,Processed,A..Total.,B..Total.,Total.number.of.influenza.positive.viruses) %>% 
+    group_by(sdate)  %>% 
+    summarise(Processed = sum(Processed),A_total = sum(A..Total.), B_total = sum(B..Total.),All_total = sum(Total.number.of.influenza.positive.viruses))
+  
+  fludat_ts_country <- ts(fludat_pivot_country[,c(2:5)], start = 2010, frequency = 52)
+  
+  train_tbats_country <- window(fludat_ts_country[,4], end = c(2018,6))
+  
+  tbats_model_country <- tbats(train_tbats_country)
+  
+  tbats_forecast_country <- forecast(tbats_model_country, h = 124)
+  
+  print(c)
+  print(accuracy(tbats_forecast_country,fludat_ts_country[,4]))  
+  
+}
+```
