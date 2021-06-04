@@ -101,33 +101,118 @@ STLF model forecast:
 
 **ARIMA model:**
 
+Ljung-box test:
+
+![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/Flu_forecast_files/figure-gfm/unnamed-chunk-10-1.png)
+
+p value: 0.99, assumtion is satisfied.
+
+ARIMA model forecast:
+
+![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/Flu_forecast_files/figure-gfm/unnamed-chunk-11-1.png)
+
+The best ARIMA model is ARIMA(2,0,0)(1,1,0).
+
 **TBATS model:**
 
+Ljung-box test:
+
+![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/Flu_forecast_files/figure-gfm/unnamed-chunk-12-1.png)
+
+p value: 0.26, assumtion is satisfied.
+
+TBATS model forecast:
+
+![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/Flu_forecast_files/figure-gfm/unnamed-chunk-13-1.png)
+
 **LSTM models:**
-LSTM intuition
+
+Traditional neural networks do not have the ability, to use the information in the past, or we can also say that they do not have a memory cell, which helps the model to decide what is going to happen in the future.
+
+The solution for this issue is the RNN (Recurrent Neural Network). They are networks with loops in them, allowing information to persist. A recurrent neural network can be thought of as multiple copies of the same network, each passing a message to a successor.
+
+**Vanishing Gradient Problem:** 
+
+In ANN the Gradient Descent algorithm finds the global minimum of the cost function for the network setup. Basically, the information travels through the neural network from input neurons to the output neurons, while the error is calculated and propagated back through the network to update the weights.
+
+In RNN all the neurons far back in time contributed in calculating the output. So in the backpropagation process, we have to go all the way back in time into these neurons. During the backprop, we need to pass the derivative from back to front, which involves multiplying a number less than 1 for many times. In RNN the network can be really deep, because we have to go all the way back in each time, therefore at some point the gradient will become extremely small  (almost zero), and eventually the neurons will stop learning. 
+
+The RNN unfortunately is not capable of learning long term dependencies in practice. The LSTM networks are the solution for this issue.
+
+**Long Short Term Memory (LSTM):**
+
+The LSTM is a special kind of RNN, which is capable of handling long term dependencies. The standtard RNN has a very simple structure, for instance a single tanh layer. LSTM also a chain like structure like RNN, but it has 4 layers instead of one single layer. There are 4 parts of the LSTM network. 
+
+It has a **memory cell**, which runs straight down the entire chain, with only some minor linear interactions. The **forget gate layer's** task is to decide what information we are going to throw away from the memory cell. The **input gate layer** decides what new information we are going to store in the memory cell. The last part is the **output gate layer**, which generates the output. This output will be based on our memory cell's state, but will be a filtered version.
+
+So the most important thing is that the LSTM does have the ability to remove or add information into the memory cell, carefully regulated by structures called gates. 
+
+**LSTM network:**
+
+![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/plot/LSTM2.png)
 
 **LSTM model 1.:**
-Milyen architektura
-learning plot
-forecasting plot
+
+The first LSTM model I tried is the Vanilla LSTM, which has a single LSTM network.
+
+Input - LSTM(50) - Dropout - Output
+
+The learning plot of the model:
+
+![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/plot/LSTM_model1_training_plot.png)
+
+Forecast:
+
+![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/plot/LSTM1_Forecast.png)
 
 **LSTM model 2.:**
-Milyen architektura
-learning plot
-forecasting plot
+
+The second LSTM model is a stacked model.
+
+Input - LSTM(50) - Dropout - LSTM(50) - Dropout - Output
+
+The learning plot of the model:
+
+![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/plot/LSTM_model2_training_plot.png)
+
+Forecast:
+
+![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/plot/LSTM2_forecast.png)
 
 **LSTM model 3.:**
-Milyen architektura
-learning plot
-forecasting plot
+
+The third model I tried, is the Bidirectional LSTM model.
+
+Input - Bidirectional(LSTM(50)) - Dropout - Output
+
+The learning plot of the model:
+
+![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/plot/LSTM_model3_training_plot.png)
+
+Forecast:
+
+![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/plot/LSTM3_forecast.png)
 
 **LSTM model 4.:**
-Milyen architektura
-learning plot
-forecasting plot
+
+The fourth model is a stacked LSTM, but with a relu activation function.
+
+
+Input - LSTM(50) - Dropout - LSTM(50) - Dropout - Output
+
+The learning plot of the model:
+
+![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/plot/LSTM_model4_training_plot.png)
+
+Forecast:
+
+![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/plot/LSTM4_forecast.png)
 
 #### Evaluation:
-Summary table
+
+I checked the accuracy of the models with mostly the RMSE and MAE. The following table shows the final results. We can see that the neural networks have a much better performance on the dataset.
+
+![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/plot/df_summary.png)
 
 ### Credits:
 * https://colah.github.io/posts/2015-08-Understanding-LSTMs/
