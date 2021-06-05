@@ -78,6 +78,19 @@ Seasonality plot no. 3.:
 
 ![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/Flu_forecast_files/figure-gfm/unnamed-chunk-5-1.png)
 
+**Anomaly detection:**
+
+I used the Seasonal method to identify the potential anomalies in the dataset.
+I checked the standard deviation in each month. Where there is a significant amount of deviation, there might be an anomaly existing.
+
+![](https://github.com/nctung4/Flu_Time_Series_Forecasting/blob/main/plot/Anomaly_detect.png)
+
+We can see from the graph that January and February might have an anomaly.
+
+I did futher standard deviation analysis on these month, and the final 2 anomalies are the following:
+* 2019-01-28:	24017	
+* 2019-02-04:	27344	
+
 #### Modeling:
 In the traditional time series models, we can say that the model used all of the information available, if the residuals satifies the following assumptions:
 * They are not correlated with each other.
